@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Gencer Teknik - İş & Mesai & Borç Takip Portalı</title>
+    
+    <!-- PWA & MOBILE APP META TAGS FOR IOS AND ANDROID -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gencer Teknik">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#05080e">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2830/2830305.png">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brandOrange: '#F38E23', brandDark: '#121A29' },
+                    keyframes: {
+                        modalEnter: {
+                            '0%': { opacity: '0', transform: 'scale(0.97) translateY(6px)' },
+                            '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+                        },
+                        waveSlow: {
+                            '0%': { transform: 'translateX(0) translateY(0)' },
+                            '50%': { transform: 'translateX(-6px) translateY(3px)' },
+                            '100%': { transform: 'translateX(0) translateY(0)' }
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 10px rgba(243, 142, 35, 0.15)' },
+                            '50%': { boxShadow: '0 0 20px rgba(243, 142, 35, 0.3)' }
+                        }
+                    },
+                    animation: {
+                        'modal-enter': 'modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'wave-slow': 'waveSlow 35s ease-in-out infinite',
+                        'pulse-glow': 'pulseGlow 4s ease-in-out infinite'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        html, body {
+            overscroll-behavior-y: none;
+            touch-action: manipulation;
+            -webkit-text-size-adjust: 100%;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #05080e;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .industrial-bg {
+            background-color: #0b111e;
+            background-image: linear-gradient(rgba(243, 142, 35, 0.08) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(243, 142, 35, 0.08) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .wave-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 40%;
+            overflow: hidden; z-index: 1; pointer-events: none;
+        }
+
+        .wave-bg-secondary {
+            position: absolute; top: -20px; left: -5%; width: 110%; height: 100%;
+            background: rgba(243, 142, 35, 0.12);
+            border-bottom-left-radius: 50% 20px; border-bottom-right-radius: 50% 20px;
+            animation: waveSlow 45s ease-in-out infinite;
+        }
+
+        .wave-bg {
+            position: absolute; top: 0; left: -5%; width: 110%; height: 95%;
+            background: linear-gradient(180deg, #d97706 0%, #B45309 45%, #151e2e 100%);
+            border-bottom-left-radius: 50% 25px; border-bottom-right-radius: 50% 25px;
+            animation: waveSlow 35s ease-in-out infinite alternate;
+        }
+
+        .industrial-card {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            transition: all 0.2s ease;
+        }
+
+        .active-card {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border: 1.5px solid rgba(243, 142, 35, 0.6);
+            box-shadow: 0 0 20px rgba(243, 142, 35, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+            animation: pulseGlow 4s infinite;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+
+    <!-- FIREBASE INTEGRATION SETUP -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, updateDoc, doc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.db = null;
+        window.auth = null;
+        window.currentUser = null;
+        window.appId = typeof __app_id !== 'undefined' ? __app_id : 'gencer-teknik-app';
+
+        try {
+            const firebaseConfig = {
+                apiKey: "AIzaSyAZny955XO8L5dXsbSXeXXSf5XEyh2IIho",
+                authDomain: "hasan-ce5f9.firebaseapp.com",
+                projectId: "hasan-ce5f9",
+                storageBucket: "hasan-ce5f9.firebasestorage.app",
+                messagingSenderId: "884455783055",
+                appId: "1:884455783055:web:90752874c8a70870e4cefa",
+                measurementId: "G-WX21RTZJ9C"
+            };
+
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            window.auth = getAuth(app);
+
+            const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            if (token) {
+                signInWithCustomToken(window.auth, token).catch(() => signInAnonymously(window.auth));
+            } else {
+                signInAnonymously(window.auth).catch(err => console.log("Auth fallback active"));
+            }
+
+            onAuthStateChanged(window.auth, (user) => {
+                if (user) {
+                    window.currentUser = user;
+                    listenToMesaiLogs();
+                    listenToBorcLogs();
+                    listenToStaffList();
+                }
+            });
+        } catch (e) {
+            console.warn("Firebase fallback mode active:", e);
+        }
+
+        // Firestore Listeners
+        function listenToMesaiLogs() {
+            if (!window.db) return;
+            const colRef = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'mesai_records');
+            onSnapshot(colRef, (snapshot) => {
+                const logs = [];
+                snapshot.forEach(d => logs.push({ id: d.id, ...d.data() }));
+                window.syncMesaiData(logs);
+            }, (err) => console.warn(err));
+        }
+
+        function listenToBorcLogs() {
+            if (!window.db) return;
+            const colRef = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'borc_records');
+            onSnapshot(colRef, (snapshot) => {
+                const logs = [];
+                snapshot.forEach(d => logs.push({ id: d.id, ...d.data() }));
+                window.syncBorcData(logs);
+            }, (err) => console.warn(err));
+        }
+
+        function listenToStaffList() {
+            if (!window.db) return;
+            const colRef = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'staff_records');
+            onSnapshot(colRef, (snapshot) => {
+                const list = [];
+                snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
+                window.syncStaffData(list);
+            }, (err) => console.warn(err));
+        }
+
+        // Firestore Actions
+        window.fbAddMesai = async function(record) {
+            if (window.db) {
+                try {
+                    const colRef = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'mesai_records');
+                    await addDoc(colRef, { ...record, createdAt: serverTimestamp() });
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        window.fbAddBorc = async function(record) {
+            if (window.db) {
+                try {
+                    const colRef = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'borc_records');
+                    await addDoc(colRef, { ...record, createdAt: serverTimestamp() });
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        window.fbUpdateBorcStatus = async function(id, resolved) {
+            if (window.db) {
+                try {
+                    const docRef = doc(window.db, 'artifacts', window.appId, 'public', 'data', 'borc_records', id);
+                    await updateDoc(docRef, { resolved });
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        window.fbDeleteBorc = async function(id) {
+            if (window.db) {
+                try {
+                    const docRef = doc(window.db, 'artifacts', window.appId, 'public', 'data', 'borc_records', id);
+                    await deleteDoc(docRef);
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        window.fbAddStaff = async function(name) {
+            if (window.db) {
+                try {
+                    const colRef = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'staff_records');
+                    await addDoc(colRef, { name, createdAt: serverTimestamp() });
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        window.fbDeleteStaff = async function(id) {
+            if (window.db) {
+                try {
+                    const docRef = doc(window.db, 'artifacts', window.appId, 'public', 'data', 'staff_records', id);
+                    await deleteDoc(docRef);
+                } catch(e) { console.error(e); }
+            }
+        }
+    </script>
+</head>
+<body class="flex justify-center items-center h-full w-full p-0 sm:p-4">
+
+    <!-- Mobile Device Container -->
+    <div class="relative w-full max-w-sm h-full sm:h-[844px] industrial-bg sm:rounded-[36px] shadow-2xl overflow-hidden flex flex-col justify-between border-0 sm:border-[8px] border-slate-900">
+        
+        <div class="wave-container"><div class="wave-bg-secondary"></div><div class="wave-bg"></div></div>
+
+        <!-- TOP HEADER -->
+        <div class="relative z-10 pt-12 sm:pt-6 pb-2 px-5 flex justify-center items-center shrink-0">
+            <div class="flex flex-col items-center justify-center bg-[#0f172a]/90 backdrop-blur-md px-6 py-3 rounded-xl border border-amber-500/30 shadow-xl w-full max-w-[320px]">
+                <h1 class="text-2xl font-black tracking-widest text-white uppercase drop-shadow-md">
+                    GENCER <span class="text-[#F38E23]">TEKNİK</span>
+                </h1>
+                <div class="flex items-center gap-1.5 mt-1">
+                    <span class="h-[1px] w-4 bg-[#F38E23]/60"></span>
+                    <span class="text-[10px] font-bold text-[#F38E23] tracking-[0.2em] uppercase">Hırdavat & Yapı</span>
+                    <span class="h-[1px] w-4 bg-[#F38E23]/60"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN APP CARD GRID -->
+        <div class="relative z-10 flex-1 px-6 py-2 flex flex-col justify-center overflow-y-auto no-scrollbar">
+            <div class="grid grid-cols-2 gap-4 my-auto">
+                
+                <!-- BORÇ TAKİP -->
+                <button onclick="openModal('borcModal')" class="active-card text-white rounded-2xl p-4 h-44 flex flex-col justify-between items-center active:scale-95 transition-all group cursor-pointer">
+                    <div class="w-full text-center border-b border-slate-700/60 pb-2">
+                        <span class="font-extrabold text-amber-400 text-xs tracking-wider uppercase group-hover:text-white transition-colors">BORÇ TAKİP</span>
+                    </div>
+                    <div class="relative w-16 h-16 rounded-xl bg-slate-800/90 border border-amber-500/40 flex items-center justify-center my-auto shadow-inner group-hover:scale-110 transition-transform">
+                        <i class="fa-solid fa-file-invoice-dollar text-2xl text-[#F38E23] relative z-10"></i>
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-medium tracking-tight bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800">Canlı Firma Borçları</div>
+                </button>
+
+                <!-- MESAİ TAKİP -->
+                <button onclick="openModal('mesaiModal')" class="active-card text-white rounded-2xl p-4 h-44 flex flex-col justify-between items-center active:scale-95 transition-all group cursor-pointer">
+                    <div class="w-full text-center border-b border-slate-700/60 pb-2">
+                        <span class="font-extrabold text-amber-400 text-xs tracking-wider uppercase group-hover:text-white transition-colors">MESAİ TAKİP</span>
+                    </div>
+                    <div class="relative w-16 h-16 rounded-xl bg-slate-800/90 border border-amber-500/40 flex items-center justify-center my-auto shadow-inner group-hover:scale-110 transition-transform">
+                        <i class="fa-regular fa-clock text-2xl text-[#F38E23] relative z-10"></i>
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-medium tracking-tight bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800">12 Ay & Canlı Takvim</div>
+                </button>
+
+                <!-- PASİF KARTLAR -->
+                <div class="industrial-card rounded-2xl p-4 h-44 flex flex-col items-center justify-center border border-slate-800/80 opacity-60">
+                    <i class="fa-solid fa-lock text-slate-600 text-xl mb-2"></i>
+                    <span class="font-semibold text-slate-400 text-xs tracking-wider uppercase">Aktif Değil</span>
+                </div>
+                <div class="industrial-card rounded-2xl p-4 h-44 flex flex-col items-center justify-center border border-slate-800/80 opacity-60">
+                    <i class="fa-solid fa-lock text-slate-600 text-xl mb-2"></i>
+                    <span class="font-semibold text-slate-400 text-xs tracking-wider uppercase">Aktif Değil</span>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- BOTTOM NAVIGATION BAR -->
+        <div class="relative z-10 pb-8 sm:pb-0 h-24 sm:h-20 bg-[#0a0f19] border-t border-slate-800/80 px-12 flex items-center justify-between shrink-0">
+            <button onclick="switchTab('home')" class="flex flex-col items-center text-[#F38E23] transition-transform active:scale-90 p-2">
+                <i class="fa-solid fa-house text-2xl"></i>
+                <span class="text-[9px] font-bold mt-1 tracking-wider uppercase">Ana Sayfa</span>
+            </button>
+            <button onclick="switchTab('profile')" class="flex flex-col items-center text-slate-400 hover:text-[#F38E23] transition-transform active:scale-90 p-2">
+                <i class="fa-solid fa-user-gear text-2xl"></i>
+                <span class="text-[9px] font-bold mt-1 tracking-wider uppercase">Personel</span>
+            </button>
+        </div>
+
+        <!-- ================= BORÇ TAKİP MODÜLÜ ================= -->
+        <div id="borcModal" class="hidden absolute inset-0 bg-[#0b111e] z-50 flex flex-col pt-12 sm:pt-4 p-4 overflow-y-auto no-scrollbar animate-modal-enter">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+                <div class="flex items-center gap-2 text-[#F38E23]">
+                    <i class="fa-solid fa-file-invoice-dollar text-xl"></i>
+                    <h2 class="text-base font-bold text-white">Borç & Malzeme Takip</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="openAddBorcPage()" class="w-8 h-8 rounded-lg bg-[#F38E23] text-[#121A29] font-black flex items-center justify-center shadow active:scale-95 transition-transform hover:scale-105">
+                        <i class="fa-solid fa-plus text-sm"></i>
+                    </button>
+                    <button onclick="closeModal('borcModal')" class="text-slate-400 hover:text-white p-2">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mt-4 flex-1 space-y-2.5 overflow-y-auto no-scrollbar pb-24" id="borcListContainer"></div>
+        </div>
+
+        <!-- YENİ BORÇ EKLE -->
+        <div id="addBorcPage" class="hidden absolute inset-0 bg-[#0b111e] z-[60] flex flex-col pt-12 sm:pt-5 p-5 animate-modal-enter overflow-y-auto no-scrollbar">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="text-sm font-bold text-amber-400"><i class="fa-solid fa-plus-circle mr-1"></i> Yeni Borç Ekle</h3>
+                <button onclick="closeAddBorcPage()" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="mt-4 space-y-4 flex-1">
+                <div>
+                    <label class="text-xs text-slate-400">Firma Adı</label>
+                    <input type="text" id="borcFirma" placeholder="Örn: Yıldız Yapı Ltd." class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-white focus:outline-none focus:border-[#F38E23]">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400">Malzeme Adı & Miktar / Birim</label>
+                    <div class="flex gap-2 mt-1">
+                        <input type="text" id="borcMalzeme" placeholder="Örn: 50 Demir Profil" class="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-white focus:outline-none focus:border-[#F38E23]">
+                        <select id="borcBirim" class="bg-slate-900 border border-amber-500/40 rounded-lg px-3 py-2 text-xs text-amber-400 font-bold focus:outline-none">
+                            <option value="Ad">Ad</option>
+                            <option value="Bin">Bin</option>
+                            <option value="Pkt">Pkt</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400">Açıklama</label>
+                    <textarea id="borcAck" rows="3" placeholder="Örn: Acil sevkiyat borcu" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-white focus:outline-none focus:border-[#F38E23]"></textarea>
+                </div>
+                <button onclick="saveNewBorc()" class="w-full py-3 bg-[#F38E23] text-[#121A29] font-black text-xs rounded-xl shadow-lg active:scale-95 transition-all mt-4">Borcu Canlı Ekle</button>
+            </div>
+        </div>
+
+        <!-- MESAİ TAKİP MODÜLÜ -->
+        <div id="mesaiModal" class="hidden absolute inset-0 bg-[#0b111e] z-50 flex flex-col pt-12 sm:pt-4 p-4 overflow-y-auto no-scrollbar animate-modal-enter">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+                <div class="flex items-center gap-2 text-[#F38E23]">
+                    <i class="fa-solid fa-calendar-days text-xl"></i>
+                    <h2 id="calendarTitle" class="text-base font-bold text-white">Mesai Takip - 12 Ay</h2>
+                </div>
+                <button onclick="closeModal('mesaiModal')" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div id="viewMonths" class="mt-4 flex-1">
+                <div class="grid grid-cols-3 gap-2.5" id="monthsGrid"></div>
+            </div>
+
+            <div id="viewDays" class="hidden mt-3 space-y-4 flex-1">
+                <div class="flex items-center justify-between">
+                    <button onclick="showMonthsView()" class="text-xs text-[#F38E23] flex items-center gap-1 font-bold bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 active:scale-95">
+                        <i class="fa-solid fa-arrow-left"></i> Aylara Dön
+                    </button>
+                    <span id="selectedMonthLabel" class="text-xs font-bold text-slate-300 uppercase tracking-wider"></span>
+                </div>
+
+                <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                    <div id="daysGrid" class="grid grid-cols-7 gap-1 text-center"></div>
+                </div>
+
+                <div id="dayActionPanel" class="bg-slate-900 p-3.5 rounded-xl border border-amber-500/40 space-y-3">
+                    <div class="grid grid-cols-2 gap-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                        <div>
+                            <label class="text-[10px] text-amber-400 font-bold">Ortak Saat</label>
+                            <input type="number" step="0.5" id="commonHours" oninput="applyCommonHours(this.value)" class="w-full mt-1 bg-slate-900 border border-amber-500/30 rounded p-1.5 text-xs text-white focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-slate-400">Açıklama</label>
+                            <input type="text" id="commonNote" placeholder="Saha Montaj" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-white focus:outline-none">
+                        </div>
+                    </div>
+                    <div id="staffChecklist" class="space-y-1.5 max-h-32 overflow-y-auto no-scrollbar"></div>
+                    <button onclick="saveSelectedStaffToDay()" class="w-full py-2.5 bg-[#F38E23] text-[#121A29] font-black text-xs rounded-lg shadow-md active:scale-95 cursor-pointer">
+                        Seçilenlere Canlı Mesai Ekle
+                    </button>
+                </div>
+
+                <div class="relative pb-24">
+                    <h3 class="text-xs font-bold text-slate-300 mb-2 flex items-center justify-between">
+                        <span id="selectedDayListTitle">Günün Kayıtları</span>
+                        <span class="text-[10px] text-emerald-400 font-bold">● Canlı Sync</span>
+                    </h3>
+                    <div id="mesaiListContainer" class="space-y-1.5 max-h-32 overflow-y-auto no-scrollbar"></div>
+
+                    <div class="mt-3 bg-gradient-to-r from-slate-900 to-[#1e293b] p-3 rounded-xl border border-amber-500/40 flex items-center justify-between shadow-xl">
+                        <div>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase" id="activeStaffTotalLabel">Personel</p>
+                            <span id="animatedMonthTotal" class="text-xl font-black text-[#F38E23] font-mono tracking-tight">0.0</span> <span class="text-xs text-slate-300">Saat</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOPLU AY RAPORU -->
+            <div id="viewMonthReport" class="hidden mt-3 space-y-4 flex-1">
+                <div class="flex items-center justify-between">
+                    <button onclick="showMonthsView()" class="text-xs text-[#F38E23] flex items-center gap-1 font-bold bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 active:scale-95">
+                        <i class="fa-solid fa-arrow-left"></i> Aylara Dön
+                    </button>
+                    <span id="reportMonthTitle" class="text-xs font-bold text-amber-400 uppercase tracking-wider"></span>
+                </div>
+                <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-3 pb-24">
+                    <p class="text-[11px] text-slate-400">Aktif personellerin aylık toplam çalışma saatleri:</p>
+                    <div id="monthReportListContainer" class="space-y-2 max-h-72 overflow-y-auto no-scrollbar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERSONEL YÖNETİMİ TAB -->
+        <div id="profileTab" class="hidden absolute inset-0 bg-[#121A29] z-40 p-6 pt-12 sm:pt-6 flex flex-col justify-between animate-modal-enter overflow-y-auto no-scrollbar">
+            <div>
+                <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                    <h2 class="text-xl font-bold text-white">Personel Yönetimi</h2>
+                    <button onclick="switchTab('home')" class="text-slate-400 p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <div class="mt-4 space-y-3">
+                    <label class="text-xs text-slate-400">Yeni Personel Ekle (Canlı)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="newStaffName" placeholder="Ad Soyad" class="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-[#F38E23]">
+                        <button onclick="addNewCustomStaff()" class="bg-[#F38E23] text-[#121A29] font-bold px-4 py-2.5 rounded-lg text-xs">Ekle</button>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-xs text-slate-400 mb-2">Canlı Kayıtlı Personeller:</p>
+                        <div id="profileStaffList" class="space-y-2 max-h-64 overflow-y-auto no-scrollbar pb-12"></div>
+                    </div>
+                </div>
+            </div>
+            <button onclick="switchTab('home')" class="w-full py-3 bg-slate-800 text-slate-200 font-bold rounded-xl border border-slate-700 mt-4 mb-8 sm:mb-0">
+                Ana Sayfaya Dön
+            </button>
+        </div>
+
+    </div>
+
+    <!-- MAIN APP SCRIPT -->
+    <script>
+        let liveBorcData = [];
+        let liveMesaiData = [];
+        let liveStaffData = [
+            { id: '1', name: "Ahmet Usta" },
+            { id: '2', name: "Mustafa Gencer" },
+            { id: '3', name: "Kadir Usta" },
+            { id: '4', name: "Mehmet Ekici" },
+            { id: '5', name: "Ali Yılmaz" }
+        ];
+
+        window.syncBorcData = function(data) {
+            liveBorcData = data;
+            if (document.getElementById('borcModal') && !document.getElementById('borcModal').classList.contains('hidden')) {
+                renderBorcList();
+            }
+        };
+
+        window.syncMesaiData = function(data) {
+            liveMesaiData = data;
+            if (document.getElementById('viewDays') && !document.getElementById('viewDays').classList.contains('hidden')) {
+                selectDay(selectedDay);
+            }
+        };
+
+        window.syncStaffData = function(list) {
+            if (list.length > 0) {
+                liveStaffData = list;
+            }
+            if (document.getElementById('staffChecklist')) renderStaffChecklist();
+            if (document.getElementById('profileStaffList') && !document.getElementById('profileTab').classList.contains('hidden')) {
+                renderProfileStaffList();
+            }
+        };
+
+        const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+        const dayNamesShort = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+        const monthDaysCount = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+        let selectedMonthIndex = 10;
+        let selectedDay = 3;
+        let currentYear = 2026;
+        let selectedStaffForTotal = null;
+
+        // Borç Takip
+        function renderBorcList() {
+            const container = document.getElementById('borcListContainer');
+            if (!container) return;
+            if (liveBorcData.length === 0) {
+                container.innerHTML = `<div class="p-6 text-center text-xs text-slate-500 bg-slate-900 rounded-xl">Kayıtlı borç bulunmuyor.</div>`;
+                return;
+            }
+            container.innerHTML = liveBorcData.map(item => `
+                <div class="bg-slate-900 p-3.5 rounded-xl border ${item.resolved ? 'border-emerald-500/40 opacity-75' : 'border-amber-500/40'} flex items-center justify-between">
+                    <div>
+                        <span class="font-bold text-white text-xs">${item.firma}</span>
+                        <span class="text-[10px] bg-slate-800 text-amber-400 px-2 py-0.5 ml-1 rounded font-bold">${item.malzeme}</span>
+                        <p class="text-[11px] text-slate-400 mt-1">${item.ack || ''}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="window.fbUpdateBorcStatus('${item.id}', ${!item.resolved})" class="px-2.5 py-1 ${item.resolved ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'} font-bold text-[10px] rounded-lg border border-opacity-40">
+                            ${item.resolved ? 'Çözüldü' : 'Çözülmedi'}
+                        </button>
+                        <button onclick="window.fbDeleteBorc('${item.id}')" class="p-2 text-slate-400 hover:text-rose-400 transition-colors">
+                            <i class="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openAddBorcPage() { document.getElementById('addBorcPage').classList.remove('hidden'); }
+        function closeAddBorcPage() { document.getElementById('addBorcPage').classList.add('hidden'); }
+        
+        function saveNewBorc() {
+            const firma = document.getElementById('borcFirma').value;
+            const malz = document.getElementById('borcMalzeme').value;
+            const birim = document.getElementById('borcBirim').value;
+            const ack = document.getElementById('borcAck').value;
+            if(!firma || !malz) return;
+
+            window.fbAddBorc({
+                firma,
+                malzeme: `${malz} ${birim}`,
+                ack,
+                resolved: false,
+                date: new Date().toLocaleDateString('tr-TR')
+            });
+
+            document.getElementById('borcFirma').value = '';
+            document.getElementById('borcMalzeme').value = '';
+            document.getElementById('borcAck').value = '';
+            closeAddBorcPage();
+        }
+
+        // Mesai Takip
+        function renderMonthsGrid() {
+            const monthsGrid = document.getElementById('monthsGrid');
+            if(!monthsGrid) return;
+            monthsGrid.innerHTML = monthNames.map((n, idx) => {
+                const count = liveMesaiData.filter(m => m.month === idx).length;
+                const isCurrent = idx === selectedMonthIndex;
+                return `
+                    <div class="flex flex-col gap-1">
+                        <button onclick="selectMonth(${idx})" class="p-2.5 rounded-xl border flex flex-col items-center ${isCurrent?'bg-amber-500/10 border-[#F38E23] text-white':'bg-slate-900 border-slate-800 text-slate-300'}">
+                            <span class="text-xs font-bold">${n}</span>
+                            <span class="text-[9px] text-slate-500">${count} Kayıt</span>
+                        </button>
+                        <button onclick="openMonthReport(${idx})" class="text-[9px] bg-slate-800 text-amber-400 py-1 rounded font-bold active:scale-95">Rapor</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectMonth(idx) { 
+            selectedMonthIndex = idx; 
+            document.getElementById('viewMonths').classList.add('hidden'); 
+            document.getElementById('viewDays').classList.remove('hidden'); 
+            document.getElementById('selectedMonthLabel').innerText = `${monthNames[idx]} ${currentYear}`; 
+            renderDaysGrid(); 
+            selectDay(1); 
+        }
+
+        function showMonthsView() { 
+            document.getElementById('viewDays').classList.add('hidden'); 
+            document.getElementById('viewMonthReport').classList.add('hidden'); 
+            document.getElementById('viewMonths').classList.remove('hidden'); 
+            renderMonthsGrid(); 
+        }
+        
+        function renderDaysGrid() {
+            let html = dayNamesShort.map(d => `<span class="text-[10px] text-amber-400 py-1">${d}</span>`).join('');
+            for (let d = 1; d <= monthDaysCount[selectedMonthIndex]; d++) {
+                const isSelected = d === selectedDay;
+                const hasData = liveMesaiData.some(m => m.month === selectedMonthIndex && m.day === d);
+                html += `<button onclick="selectDay(${d})" class="py-1.5 rounded-lg text-xs font-bold relative ${isSelected?'bg-[#F38E23] text-[#121A29]':'bg-slate-950 text-slate-300 border border-slate-800/60'}">${d}${hasData && !isSelected ? '<span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#F38E23]"></span>':''}</button>`;
+            }
+            document.getElementById('daysGrid').innerHTML = html;
+        }
+
+        function selectDay(d) {
+            selectedDay = d; 
+            renderDaysGrid();
+            renderStaffChecklist();
+            const dayRecs = liveMesaiData.filter(m => m.month === selectedMonthIndex && m.day === d);
+            dayRecs.sort((a, b) => b.hours - a.hours);
+            renderMesaiList(dayRecs);
+            if (!selectedStaffForTotal && liveStaffData.length > 0) selectedStaffForTotal = liveStaffData[0].name;
+            calcTotal(selectedStaffForTotal);
+        }
+
+        function renderStaffChecklist() {
+            const commonHoursVal = document.getElementById('commonHours')?.value || '';
+            const checklistContainer = document.getElementById('staffChecklist');
+            if(!checklistContainer) return;
+            checklistContainer.innerHTML = liveStaffData.map(staff => `
+                <div class="bg-slate-950 p-2 rounded-lg border border-slate-800 flex justify-between items-center">
+                    <label class="flex items-center gap-2 cursor-pointer flex-1"><input type="checkbox" id="chk_${staff.id}" checked class="rounded border-slate-700 text-[#F38E23]"> <span class="text-xs text-white">${staff.name}</span></label>
+                    <input type="number" step="0.5" id="hr_${staff.id}" placeholder="0" value="${commonHoursVal}" class="w-12 bg-slate-900 border border-slate-700 text-xs text-white rounded text-center py-1 focus:border-[#F38E23]">
+                </div>
+            `).join('');
+        }
+
+        function applyCommonHours(val) { 
+            liveStaffData.forEach(s => { 
+                const inp = document.getElementById(`hr_${s.id}`);
+                if(inp) inp.value = val; 
+            }); 
+        }
+
+        function saveSelectedStaffToDay() {
+            const commonNote = document.getElementById('commonNote').value || 'Saha Mesaisi';
+            const dateStr = `${selectedDay < 10 ? '0' + selectedDay : selectedDay}.${selectedMonthIndex + 1 < 10 ? '0' + (selectedMonthIndex + 1) : selectedMonthIndex + 1}.${currentYear}`;
+
+            liveStaffData.forEach(s => {
+                const chk = document.getElementById(`chk_${s.id}`);
+                if(chk && chk.checked) {
+                    const hrs = parseFloat(document.getElementById(`hr_${s.id}`)?.value || 0);
+                    if(hrs > 0) {
+                        window.fbAddMesai({
+                            person: s.name,
+                            hours: hrs,
+                            note: commonNote,
+                            date: dateStr,
+                            day: selectedDay,
+                            month: selectedMonthIndex,
+                            year: currentYear
+                        });
+                    }
+                }
+            });
+            document.getElementById('commonHours').value = '';
+            document.getElementById('commonNote').value = '';
+            selectDay(selectedDay);
+        }
+
+        function renderMesaiList(list) {
+            const container = document.getElementById('mesaiListContainer');
+            if(!container) return;
+            container.innerHTML = list.map((item, idx) => `
+                <div onclick="selectPersonForTotal('${item.person}')" class="bg-slate-900 p-2.5 rounded-lg border ${selectedStaffForTotal === item.person ? 'border-[#F38E23] bg-slate-800/80' : 'border-slate-800'} flex justify-between items-center text-xs cursor-pointer">
+                    <div class="flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-slate-800 text-[10px] font-mono font-bold text-amber-500 flex items-center justify-center border border-slate-700">${idx + 1}</span>
+                        <div>
+                            <p class="font-bold text-white">${item.person}</p>
+                            <p class="text-[10px] text-slate-400">${item.note || 'Mesai'}</p>
+                        </div>
+                    </div>
+                    <span class="text-[#F38E23] font-bold font-mono px-2 py-0.5 bg-[#F38E23]/10 rounded border border-[#F38E23]/20">+${item.hours} Saat</span>
+                </div>
+            `).join('');
+        }
+
+        function selectPersonForTotal(person) {
+            selectedStaffForTotal = person;
+            const dayRecs = liveMesaiData.filter(m => m.month === selectedMonthIndex && m.day === selectedDay);
+            renderMesaiList(dayRecs);
+            calcTotal(person);
+        }
+
+        function calcTotal(person) {
+            const tot = liveMesaiData.filter(m => m.month === selectedMonthIndex && m.person === person).reduce((s, i) => s + (parseFloat(i.hours)||0), 0);
+            const totalEl = document.getElementById('animatedMonthTotal');
+            const labelEl = document.getElementById('activeStaffTotalLabel');
+            if(totalEl) totalEl.innerText = tot.toFixed(1);
+            if(labelEl) labelEl.innerText = `${person} (${monthNames[selectedMonthIndex]})`;
+        }
+
+        function openMonthReport(idx) {
+            selectedMonthIndex = idx; 
+            document.getElementById('viewMonths').classList.add('hidden'); 
+            document.getElementById('viewMonthReport').classList.remove('hidden');
+            document.getElementById('reportMonthTitle').innerText = `${monthNames[idx]} Ayı Raporu`;
+            document.getElementById('monthReportListContainer').innerHTML = liveStaffData.map(s => {
+                const tot = liveMesaiData.filter(m => m.month === idx && m.person === s.name).reduce((sum, i) => sum + (parseFloat(i.hours)||0), 0);
+                return `<div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between text-xs text-white"><span>${s.name}</span><span class="text-amber-400 font-bold">${tot.toFixed(1)} Saat</span></div>`;
+            }).join('');
+        }
+
+        // Profile
+        function addNewCustomStaff() {
+            const inputEl = document.getElementById('newStaffName');
+            const n = inputEl ? inputEl.value.trim() : '';
+            if(n) { 
+                window.fbAddStaff(n);
+                inputEl.value = ''; 
+            }
+        }
+        function renderProfileStaffList() {
+            const listEl = document.getElementById('profileStaffList');
+            if(!listEl) return;
+            listEl.innerHTML = liveStaffData.map(s => `
+                <div class="bg-slate-900 p-2.5 rounded-lg text-xs text-white flex justify-between items-center">
+                    <span>${s.name}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-emerald-400 font-bold">● Canlı</span>
+                        <button onclick="window.fbDeleteStaff('${s.id}')" class="text-slate-400 hover:text-rose-400 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Utilities
+        function openModal(id) { 
+            const modal = document.getElementById(id);
+            if(modal) modal.classList.remove('hidden'); 
+            if(id === 'borcModal') renderBorcList(); 
+            if(id === 'mesaiModal') showMonthsView(); 
+        }
+        function closeModal(id) { 
+            const modal = document.getElementById(id);
+            if(modal) modal.classList.add('hidden'); 
+        }
+        function switchTab(t) { 
+            const profileTab = document.getElementById('profileTab');
+            if(t === 'profile'){ 
+                if(profileTab) profileTab.classList.remove('hidden'); 
+                renderProfileStaffList();
+            } else { 
+                if(profileTab) profileTab.classList.add('hidden'); 
+            } 
+        }
+    </script>
+</body>
+</html>
